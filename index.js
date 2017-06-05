@@ -9,7 +9,7 @@ module.exports = function(patches){
 
       var key = parts[0];
       var $position = parts[1] && parseInt(parts[1], 10);
-
+      
       update.$push = update.$push || {};
 
       if (!isNaN($position)) {
@@ -42,9 +42,9 @@ module.exports = function(patches){
               $each: [update.$push[key]]
             };
           }
-          update.$push[path].$each.push(p.value);
+          update.$push[key].$each.push(p.value);
         } else {
-          update.$push[path] = p.value;
+          update.$push[key] = p.value;
         }
       }
     }

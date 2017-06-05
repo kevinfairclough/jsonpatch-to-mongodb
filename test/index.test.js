@@ -91,6 +91,43 @@ describe('jsonpatch to mongodb', function() {
     assert.deepEqual(toMongodb(patches), expected);
   });
 
+  it('should work with array append operator', function() {
+    var patches = [{
+      op: 'add',
+      path: '/names/-',
+      value: 'dave'
+    }
+    ];
+    console.log(patches);
+    var expected = {
+      $push: {
+        names: 'dave'
+      }
+    }
+
+    assert.deepEqual(toMongodb(patches), expected);
+  });
+
+  it('should work with array append operator for multiple additions', function() {
+    var patches = [{
+      op: 'add',
+      path: '/names/-',
+      value: 'dave'
+    }, {
+      op: 'add',
+      path: '/names/-',
+      value: 'bob'
+    }];
+
+    var expected = {
+      $push: {
+        names: {$each: ['dave','bob']}
+      }
+    }
+
+    assert.deepEqual(toMongodb(patches), expected);
+  })
+
   it('should work with remove', function() {
     var patches = [{
       op: 'remove',
