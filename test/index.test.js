@@ -98,7 +98,7 @@ describe('jsonpatch to mongodb', function() {
       value: 'dave'
     }
     ];
-    console.log(patches);
+        
     var expected = {
       $push: {
         names: 'dave'
