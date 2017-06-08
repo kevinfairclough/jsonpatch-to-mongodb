@@ -1,64 +1,106 @@
 var toDot = require('jsonpath-to-dot');
 
-module.exports = function(patches){
+module.exports = function (patches) {
   var update = {};
-  patches.map(function(p){
-    if(p.op === 'add'){
-      var path = toDot(p.path),
-        parts = path.split('.');
+  var cache = {};
+  var APPEND_OP = '-'
 
-      var key = parts[0];
-      var $position = parts[1] && parseInt(parts[1], 10);
-      
-      update.$push = update.$push || {};
+  function isNumber(s) {
+    return !isNaN(parseInt(s, 10));
+  }
 
-      if (!isNaN($position)) {
-        if (update.$push[key]) {
-          if (!isNaN(update.$push[key].$position)) {
-            $position = update.$push[key].$position;
-            delete update.$push[key].$position;
-          }
+  function isArrayAppendOp(parts) {
+    return (parts[parts.length - 1] === APPEND_OP);
+  }
 
-          if (!update.$push[key].$each) {
-            update.$push[key] = {
-              $each: [
-                update.$push[key]
-              ]
-            };
-          }
+  function isArrayOp(parts) {
+    return (isNumber(parts[parts.length - 1]));
+  }
 
-          update.$push[key].$each.push(p.value);
-          update.$push[key].$position = $position;
+  function addHandler(p) {
+    var $position;
+    var mongoPath;
+    var path = toDot(p.path),
+      parts = path.split('.');
+
+    if (parts.length > 0) {
+      if (isArrayAppendOp(parts)) {
+
+        update.$push = update.$push || {};
+        parts.splice(-1, 1);
+
+        mongoPath = parts.join('.');
+
+        if (update.$push[mongoPath]) {
+          update.$push[mongoPath].$each = update.$push[mongoPath].$each.concat([p.value]);
         } else {
-          update.$push[key] = {
-            $each: [p.value],
-            $position: $position
-          };
+          update.$push[mongoPath] = { $each: [p.value] };
+        }
+
+      } else if (isArrayOp(parts)) {
+
+        $position = parseInt(parts[parts.length - 1], 10);
+        update.$set = update.$set || {};
+        mongoPath = parts.join('.');
+        update.$set[mongoPath] = p.value;
+      } else {
+
+        update.$set = update.$set || {};
+        mongoPath = parts.join('.');
+        update.$set[mongoPath] = p.value;
+      }
+    } else {
+
+      update.$set = update.$set || {};
+      mongoPath = parts.join('.');
+      update.$set[mongoPath] = p.value;
+    }
+
+  }
+
+  function removeHandler(p) {
+    if (!update.$unset) update.$unset = {};
+    var path = toDot(p.path),
+      parts = path.split('.');
+
+    if (isArrayOp(parts)) {
+      var $position = parseInt(parts[parts.length - 1], 10);
+      parts.splice(-1, 1);
+      mongoPath = parts.join('.');
+      cachePath = parts.join('.') + '.$pos';
+
+      if (cache[cachePath]) {
+        if (update.$unset[path]) {
+          update.$unset[mongoPath + '.' + (cache[cachePath] + $position)] = 1;
+          cache[cachePath] = cache[cachePath] + 1;
+        } else {
+          update.$unset[path] = 1;
         }
       } else {
-        if (update.$push[key]) {
-          if (!update.$push[key].$each) {
-            update.$push[key] = {
-              $each: [update.$push[key]]
-            };
-          }
-          update.$push[key].$each.push(p.value);
-        } else {
-          update.$push[key] = p.value;
-        }
+        update.$unset[path] = 1;
+        cache[cachePath] = 1;
       }
+
+    } else {
+      update.$unset[path] = 1;
     }
-    else if(p.op === 'remove'){
-      if(!update.$unset) update.$unset = {};
-      update.$unset[toDot(p.path)] = 1;
-    }
-    else if(p.op === 'replace'){
-      if(!update.$set) update.$set = {};
-      update.$set[toDot(p.path)] = p.value;
-    }
-    else if(p.op !== 'test') {
+  }
+
+  function replaceHandler(p) {
+    if (!update.$set) { update.$set = {} }
+    update.$set[toDot(p.path)] = p.value;
+  }
+  patches.map(function (p) {
+    if (p.op === 'add') {
+      addHandler(p);
+    } else if (p.op === 'remove') {
+      removeHandler(p);
+    } else if (p.op === 'replace') {
+      replaceHandler(p);
+    } else if (p.op !== 'test') {
       throw new Error('Unsupported Operation! op = ' + p.op);
     }
   });
   return update;
 };
+
